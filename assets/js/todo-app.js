@@ -24,7 +24,7 @@
                     showCompleted: true,
                     showDetails: false,
                     sidebarSearchKeyword: '',
-                    sortMode: 'due_asc'
+                    sortMode: 'default'
                 },
                 
                 dom: {
@@ -56,7 +56,6 @@
                     btnToggleNotes: document.getElementById('btn-toggle-notes'),
                     txtToggleNotes: document.getElementById('toggle-notes-text'),
                     sortMode: document.getElementById('sort-mode'),
-                    btnSortOpen: document.getElementById('btn-sort-open'),
                     btnClearSort: document.getElementById('btn-clear-sort'),
                     
                     modalOverlay: document.getElementById('modal-overlay'),
@@ -81,6 +80,7 @@
 
                     btnExport: document.getElementById('btn-export'),
                     btnImport: document.getElementById('btn-import'),
+                    btnArchive: document.getElementById('btn-archive'),
                     fileInput: document.getElementById('importFile')
                 },
 
@@ -317,19 +317,8 @@
                         this.state.sortMode = this.dom.sortMode.value;
                         this.renderTasks();
                     });
-                    this.dom.btnSortOpen.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        const sel = this.dom.sortMode;
-                        if (typeof sel.showPicker === 'function') {
-                            try { sel.showPicker(); return; } catch (err) {}
-                        }
-                        try {
-                            sel.focus();
-                            sel.click();
-                        } catch (err) {}
-                    });
                     this.dom.btnClearSort.addEventListener('click', () => {
-                        this.state.sortMode = 'due_asc';
+                        this.state.sortMode = 'default';
                         this.syncFilterControls();
                         this.renderTasks();
                     });
@@ -412,6 +401,7 @@
                     this.dom.btnExport.addEventListener('click', () => this.exportData());
                     this.dom.btnImport.addEventListener('click', () => this.dom.fileInput.click());
                     this.dom.fileInput.addEventListener('change', (e) => this.importData(e.target));
+                    this.dom.btnArchive.addEventListener('click', () => this.archiveDataToCsv());
                 },
 
                 updateToggleButtons() {
@@ -558,7 +548,8 @@
                     const dateVal = this.dom.inpDate.value; 
                     const timeVal = this.dom.inpTime.value;
                     const recurrence = this.dom.inpRecurrence.value;
-                    const listId = this.dom.inpList.value;
+                    const selectedListId = this.dom.inpList.value;
+                    const listId = this.state.currentListId === 'tasks' ? 'tasks' : selectedListId;
 
                     if (listId === 'weekly-overview') return;
                     
@@ -794,7 +785,7 @@
 
                     this.dom.editInpList.innerHTML = '';
                     this.db.lists.forEach(l => {
-                        if (l.id !== 'tasks' && l.id !== 'important' && l.id !== 'weekly-overview') {
+                        if (l.id !== 'important' && l.id !== 'weekly-overview') {
                             const opt = document.createElement('option');
                             opt.value = l.id;
                             opt.textContent = l.title;
@@ -946,13 +937,13 @@
                     const select = this.dom.inpList;
                     select.innerHTML = '';
                     this.db.lists.forEach(list => {
-                        if (list.id === 'tasks' || list.id === 'important' || list.id === 'weekly-overview') return;
+                        if (list.id === 'important' || list.id === 'weekly-overview') return;
                         const option = document.createElement('option');
                         option.value = list.id;
                         option.textContent = list.title;
                         select.appendChild(option);
                     });
-                    if (this.state.currentListId === 'tasks' || this.state.currentListId === 'important' || this.state.currentListId === 'weekly-overview') select.value = 'my-day';
+                    if (this.state.currentListId === 'important' || this.state.currentListId === 'weekly-overview') select.value = 'my-day';
                     else select.value = this.state.currentListId;
                 },
 
@@ -1102,11 +1093,29 @@
                 sortTasks(tasks) {
                     return tasks.sort((a, b) => {
                         if (a.completed !== b.completed) return a.completed ? 1 : -1;
-                        if (a.important !== b.important) return a.important ? -1 : 1;
+
+                        if (a.completed && b.completed) {
+                            const aDone = a.completedAt || 0;
+                            const bDone = b.completedAt || 0;
+                            if (aDone !== bDone) return bDone - aDone;
+                            const aAdded = this.getAddedAt(a);
+                            const bAdded = this.getAddedAt(b);
+                            return bAdded - aAdded;
+                        }
 
                         const sortMode = this.state.sortMode;
                         const aAdded = this.getAddedAt(a);
                         const bAdded = this.getAddedAt(b);
+
+                        if (sortMode === 'default') {
+                            if (a.important !== b.important) return a.important ? -1 : 1;
+                            const aDue = a.dueDate || Number.MAX_SAFE_INTEGER;
+                            const bDue = b.dueDate || Number.MAX_SAFE_INTEGER;
+                            if (aDue !== bDue) return aDue - bDue;
+                            return bAdded - aAdded;
+                        }
+
+                        if (a.important !== b.important) return a.important ? -1 : 1;
 
                         if (sortMode === 'added_desc') return bAdded - aAdded;
                         if (sortMode === 'added_asc') return aAdded - bAdded;
@@ -1135,8 +1144,16 @@
                     tasks = this.applyTaskFilters(tasks);
                     tasks = this.sortTasks(tasks);
                     this.updateProgressStats();
+                    let completedDividerInserted = false;
 
                     tasks.forEach(task => {
+                        if (task.completed && !completedDividerInserted) {
+                            const divider = document.createElement('li');
+                            divider.className = 'completed-divider-item';
+                            divider.innerHTML = '<span class="completed-divider-pill">已完成</span>';
+                            frag.appendChild(divider);
+                            completedDividerInserted = true;
+                        }
                         const li = document.createElement('li');
                         
                         // Meta Tags Building
@@ -1157,7 +1174,7 @@
                             let colorClass = '';
                             if (task.completed) {
                                 const completedRef = task.completedAt || now;
-                                const wasOverdueAtCompletion = task.dueDate < completedRef;
+                                const wasOverdueAtCompletion = this.isOverdueAt(task, completedRef);
                                 if (wasOverdueAtCompletion) {
                                     dueText = `超期 (${this.formatDueDateShort(task.dueDate, false)})`;
                                     colorClass = 'text-danger';
@@ -1178,8 +1195,8 @@
                         let listLabel = '';
                         if (this.state.sidebarSearchKeyword) {
                             const list = this.db.lists.find(l => l.id === task.listId);
-                            if (list) listLabel = list.title;
-                        } else if ((this.state.currentListId === 'tasks' || this.state.currentListId === 'my-day' || this.state.currentListId === 'important' || this.state.currentListId === 'weekly-overview') && task.listId !== 'my-day') {
+                            if (list && list.id !== 'tasks' && list.id !== 'my-day') listLabel = list.title;
+                        } else if ((this.state.currentListId === 'tasks' || this.state.currentListId === 'my-day' || this.state.currentListId === 'important' || this.state.currentListId === 'weekly-overview') && task.listId !== 'my-day' && task.listId !== 'tasks') {
                             const list = this.db.lists.find(l => l.id === task.listId);
                             if (list) listLabel = list.title;
                         }
@@ -1271,6 +1288,14 @@
                     const oneDay = 3600000 * 24;
                     const days = Math.ceil(diff/oneDay);
                     return { text: `${days > 0 ? days : 0}天后 (${dateStr})` };
+                },
+
+                isOverdueAt(task, referenceTime) {
+                    if (!task || !task.dueDate) return false;
+                    if (task.hasTime) return task.dueDate < referenceTime;
+                    const due = new Date(task.dueDate);
+                    const ref = new Date(referenceTime);
+                    return !this.isSameDay(due, ref) && task.dueDate < referenceTime;
                 },
 
                 normalizeTasks() {
@@ -1374,6 +1399,75 @@
                         // Fallback keeps data from being lost if IndexedDB is unavailable.
                         localStorage.setItem(this.state.storageKey, JSON.stringify(this.db));
                     });
+                },
+                escapeCsvCell(value) {
+                    const str = value == null ? '' : String(value);
+                    return `"${str.replace(/"/g, '""')}"`;
+                },
+                taskToCsvRow(task) {
+                    const list = this.db.lists.find(l => l.id === task.listId);
+                    const steps = Array.isArray(task.steps)
+                        ? task.steps
+                            .map((s, i) => `${i + 1}、${s.text || ''}`)
+                            .join('\n')
+                        : '';
+                    const createdAt = this.formatDateWithWeekday(this.getAddedAt(task));
+                    const completedAt = task.completedAt ? this.formatDateWithWeekday(task.completedAt) : '';
+                    const dueAt = task.dueDate ? this.formatDueDateShort(task.dueDate, !!task.hasTime) : '';
+                    const row = [
+                        task.text || '',
+                        steps,
+                        task.note || '',
+                        list ? list.title : (task.listId || ''),
+                        dueAt,
+                        createdAt,
+                        completedAt
+                    ];
+                    return row.map(v => this.escapeCsvCell(v)).join(',');
+                },
+                downloadCsv(filename, lines) {
+                    const bom = '\uFEFF';
+                    const csv = bom + lines.join('\n');
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                },
+                archiveDataToCsv() {
+                    const yearInput = prompt('请输入要归档任务的完成年份（四位数字，例如2025）');
+                    if (!yearInput) return;
+                    const year = parseInt(yearInput, 10);
+                    if (!year || year < 1970 || year > 9999) {
+                        alert('年份格式不正确。请输入四位数字年份，例如 2025。');
+                        return;
+                    }
+                    const selectedTasks = this.db.tasks.filter(t => {
+                        if (!t.completed || !t.completedAt) return false;
+                        return new Date(t.completedAt).getFullYear() === year;
+                    });
+
+                    if (!selectedTasks.length) {
+                        alert(`未找到完成时间在 ${year} 年的任务。`);
+                        return;
+                    }
+
+                    const header = [
+                        '标题', '步骤', '备注', '所属清单', '截止日期', '创建时间', '完成时间'
+                    ].map(v => this.escapeCsvCell(v)).join(',');
+                    const rows = selectedTasks.map(t => this.taskToCsvRow(t));
+                    const datePart = new Date().toISOString().slice(0, 10);
+                    this.downloadCsv(`todo_archive_${datePart}.csv`, [header, ...rows]);
+
+                    if (confirm(`已导出 ${selectedTasks.length} 条 ${year} 年完成的任务到 CSV。\n是否将这些任务从当前列表中移除（仅保留在归档文件中）？`)) {
+                        const idSet = new Set(selectedTasks.map(t => t.id));
+                        this.db.tasks = this.db.tasks.filter(t => !idSet.has(t.id));
+                        this.state.expandedTaskIds = this.state.expandedTaskIds.filter(id => !idSet.has(id));
+                        this.save();
+                        this.renderAll();
+                    }
                 },
                 escapeHtml(text) { if(!text) return ''; const div = document.createElement('div'); div.textContent = text; return div.innerHTML; },
                 exportData() {

@@ -24,8 +24,9 @@
         </div>
 
         <div class="sidebar-footer">
-            <button id="btn-export" class="btn-sm">导出</button>
-            <button id="btn-import" class="btn-sm">导入</button>
+            <button id="btn-export" class="btn-sm">备份</button>
+            <button id="btn-import" class="btn-sm">恢复</button>
+            <button id="btn-archive" class="btn-sm">归档</button>
             <input type="file" id="importFile" style="display:none">
         </div>
     </aside>
@@ -53,17 +54,16 @@
         </div>
 
         <div class="filter-toolbar">
+            <div class="scope-pill">未完成</div>
             <div class="filter-group">
             <div class="filter-item sort-pill">
                 <select id="sort-mode">
+                    <option value="default">默认排序</option>
                     <option value="due_asc">按截止日期升序</option>
                     <option value="due_desc">按截止日期降序</option>
                     <option value="added_asc">按创建日期升序</option>
                     <option value="added_desc">按创建日期降序</option>
                 </select>
-                <button id="btn-sort-open" class="sort-open-btn" title="展开排序选项">
-                    <svg viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M7 10l5 5 5-5z"/></svg>
-                </button>
             </div>
             <button id="btn-clear-sort" class="sort-clear-btn" title="取消筛选">×</button>
             </div>
