@@ -1115,8 +1115,6 @@
                             return bAdded - aAdded;
                         }
 
-                        if (a.important !== b.important) return a.important ? -1 : 1;
-
                         if (sortMode === 'added_desc') return bAdded - aAdded;
                         if (sortMode === 'added_asc') return aAdded - bAdded;
 
