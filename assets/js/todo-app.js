@@ -20,6 +20,7 @@
                     editingListId: null,
                     editingSteps: [],
                     addingSteps: [],
+                    newlyAddedTaskIds: [],
                     expandedTaskIds: [],
                     showCompleted: true,
                     showDetails: false,
@@ -568,8 +569,9 @@
                         }
                     }
 
+                    const nowTs = Date.now();
                     const newTask = {
-                        id: Date.now(),
+                        id: nowTs,
                         text: text,
                         note: note,
                         listId: listId || 'my-day',
@@ -581,11 +583,12 @@
                         recurrence: recurrence,
                         completed: false,
                         completedAt: null,
-                        created: Date.now(),
-                        addedAt: Date.now()
+                        created: nowTs,
+                        addedAt: nowTs
                     };
 
                     this.db.tasks.unshift(newTask);
+                    this.state.newlyAddedTaskIds = [newTask.id];
                     this.save();
                     this.dom.inpText.value = '';
                     if (this.dom.inpNote) {
@@ -1138,6 +1141,7 @@
                 renderTasks() {
                     const listEl = this.dom.taskList;
                     listEl.innerHTML = '';
+                    const newlyAddedIdSet = new Set(this.state.newlyAddedTaskIds || []);
                     const frag = document.createDocumentFragment();
                     const now = Date.now();
                     const activeKeyword = this.state.sidebarSearchKeyword;
@@ -1228,7 +1232,7 @@
                         const isToggledByCard = this.state.expandedTaskIds.includes(task.id);
                         const baseShowDetail = this.state.sidebarSearchKeyword ? true : this.state.showDetails;
                         const shouldShowDetail = baseShowDetail ? !isToggledByCard : isToggledByCard;
-                        li.className = `task-item ${task.completed ? 'completed' : ''} ${shouldShowDetail ? 'show-detail' : ''} ${hasMeta ? '' : 'no-meta'}`;
+                        li.className = `task-item ${task.completed ? 'completed' : ''} ${shouldShowDetail ? 'show-detail' : ''} ${hasMeta ? '' : 'no-meta'} ${newlyAddedIdSet.has(task.id) ? 'task-item-new' : ''}`;
                         li.dataset.id = task.id;
 
                         const completedInfoText = task.completedAt ? `完成于${this.formatDateWithWeekday(task.completedAt)}` : '';
@@ -1269,6 +1273,7 @@
                         frag.appendChild(li);
                     });
                     listEl.appendChild(frag);
+                    if (newlyAddedIdSet.size > 0) this.state.newlyAddedTaskIds = [];
                 },
 
                 getRelativeTime(timestamp, hasTime, referenceTime = Date.now()) {
@@ -1495,11 +1500,17 @@
                     }; reader.readAsText(file); input.value = '';
                 },
                 startTimer() {
+                    let lastDateKey = this.formatDateYmd(Date.now());
                     setInterval(() => {
-                        this.syncDueTodayTasksToMyDay();
-                        this.renderHeader();
-                        this.renderTasks();
-                        this.renderSidebar();
+                        const currentDateKey = this.formatDateYmd(Date.now());
+                        if (currentDateKey !== lastDateKey) {
+                            lastDateKey = currentDateKey;
+                            this.renderAll();
+                            return;
+                        }
+                        if (!this.state.sidebarSearchKeyword && this.state.currentListId === 'my-day') {
+                            this.renderHeader();
+                        }
                     }, 60000);
                 }
             };
