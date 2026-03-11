@@ -21,11 +21,14 @@
                     editingSteps: [],
                     addingSteps: [],
                     newlyAddedTaskIds: [],
+                    clickedTaskId: null,
+                    listSwitchedPulse: false,
                     expandedTaskIds: [],
                     showCompleted: true,
                     showDetails: false,
                     sidebarSearchKeyword: '',
-                    sortMode: 'default'
+                    sortMode: 'default',
+                    skipNextAutoCollapse: false
                 },
                 
                 dom: {
@@ -45,6 +48,8 @@
                     inpDate: document.getElementById('task-date'),
                     inpTime: document.getElementById('task-time'),
                     btnClearTaskTimeX: document.getElementById('btn-clear-task-time-x'),
+                    dueQuickInline: document.getElementById('due-quick-inline'),
+                    editDueQuickInline: document.getElementById('edit-due-quick-inline'),
                     inpStepInput: document.getElementById('task-step-input'),
                     inpStepList: document.getElementById('add-step-list'),
                     inpStepAddRow: document.getElementById('add-step-row'),
@@ -243,6 +248,11 @@
                             }
                         });
                     });
+                    [this.dom.inpDate, this.dom.inpTime].forEach((el) => {
+                        el.addEventListener('focus', () => {
+                            this.state.skipNextAutoCollapse = true;
+                        });
+                    });
 
                     this.dom.btnAdd.addEventListener('click', () => this.addTask());
                     this.dom.btnCollapseInput.addEventListener('click', (e) => {
@@ -255,13 +265,37 @@
                         e.preventDefault();
                         this.dom.inpDate.value = '';
                         this.dom.inpTime.value = '';
-                        this.dom.inpDate.focus();
+                        this.dom.inpDate.blur();
+                        this.dom.inpTime.blur();
+                    });
+                    this.dom.dueQuickInline.addEventListener('click', (e) => {
+                        const dueBtn = e.target.closest('[data-due-quick]');
+                        if (dueBtn) {
+                            this.applyAddQuickDue(dueBtn.dataset.dueQuick);
+                            return;
+                        }
+                        const timeBtn = e.target.closest('[data-due-time]');
+                        if (timeBtn) {
+                            this.applyAddQuickTime(timeBtn.dataset.dueTime);
+                        }
+                    });
+                    this.dom.editDueQuickInline.addEventListener('click', (e) => {
+                        const dueBtn = e.target.closest('[data-due-quick]');
+                        if (dueBtn) {
+                            this.applyEditQuickDue(dueBtn.dataset.dueQuick);
+                            return;
+                        }
+                        const timeBtn = e.target.closest('[data-due-time]');
+                        if (timeBtn) {
+                            this.applyEditQuickTime(timeBtn.dataset.dueTime);
+                        }
                     });
                     this.dom.btnClearEditTimeX.addEventListener('click', (e) => {
                         e.preventDefault();
                         this.dom.editInpDate.value = '';
                         this.dom.editInpTime.value = '';
-                        this.dom.editInpDate.focus();
+                        this.dom.editInpDate.blur();
+                        this.dom.editInpTime.blur();
                     });
                     this.dom.inpStepInput.addEventListener('keydown', (e) => {
                         if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
@@ -286,6 +320,10 @@
                     this.dom.taskInputWrapper.addEventListener('focusout', () => {
                         setTimeout(() => {
                             if (this.dom.taskInputWrapper.contains(document.activeElement)) return;
+                            if (this.state.skipNextAutoCollapse) {
+                                this.state.skipNextAutoCollapse = false;
+                                return;
+                            }
                             if (this.hasAddTaskDraft()) return;
                             this.setTaskInputExpanded(false);
                         }, 0);
@@ -467,6 +505,59 @@
                     );
                 },
 
+                toDateInputValue(dateObj) {
+                    const y = dateObj.getFullYear();
+                    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+                    const d = String(dateObj.getDate()).padStart(2, '0');
+                    return `${y}-${m}-${d}`;
+                },
+
+                applyAddQuickDue(mode) {
+                    const dateVal = this.getQuickDueDateValue(mode);
+                    if (!dateVal) return;
+                    this.dom.inpDate.value = dateVal;
+                },
+
+                applyEditQuickDue(mode) {
+                    const dateVal = this.getQuickDueDateValue(mode);
+                    if (!dateVal) return;
+                    this.dom.editInpDate.value = dateVal;
+                },
+
+                getQuickDueDateValue(mode) {
+                    const now = new Date();
+                    now.setHours(0, 0, 0, 0);
+                    const target = new Date(now);
+                    if (mode === 'today') {
+                        // keep target as today
+                    } else if (mode === 'tomorrow') {
+                        target.setDate(target.getDate() + 1);
+                    } else if (mode === 'this-week') {
+                        const day = target.getDay();
+                        const delta = day === 0 ? 5 : 5 - day;
+                        target.setDate(target.getDate() + delta);
+                    } else if (mode === 'next-week') {
+                        const day = target.getDay();
+                        const thisWeekFridayDelta = day === 0 ? 5 : 5 - day;
+                        const delta = thisWeekFridayDelta + 7;
+                        target.setDate(target.getDate() + delta);
+                    } else {
+                        return '';
+                    }
+                    return this.toDateInputValue(target);
+                },
+
+                applyAddQuickTime(mode) {
+                    if (mode === 'offwork') {
+                        this.dom.inpTime.value = '17:30';
+                    }
+                },
+                applyEditQuickTime(mode) {
+                    if (mode === 'offwork') {
+                        this.dom.editInpTime.value = '17:30';
+                    }
+                },
+
                 resetDueInputs() {
                     this.dom.inpDate.value = '';
                     this.dom.inpTime.value = '';
@@ -476,6 +567,7 @@
                     const idx = this.state.expandedTaskIds.indexOf(id);
                     if (idx > -1) this.state.expandedTaskIds.splice(idx, 1);
                     else this.state.expandedTaskIds.push(id);
+                    this.state.clickedTaskId = id;
                     this.renderTasks();
                 },
 
@@ -539,6 +631,8 @@
                     this.state.currentListId = id;
                     this.state.sidebarSearchKeyword = '';
                     this.state.expandedTaskIds = [];
+                    this.state.clickedTaskId = null;
+                    this.state.listSwitchedPulse = true;
                     this.resetDueInputs();
                     this.renderAll();
                 },
@@ -1140,6 +1234,8 @@
                     const listEl = this.dom.taskList;
                     listEl.innerHTML = '';
                     const newlyAddedIdSet = new Set(this.state.newlyAddedTaskIds || []);
+                    const clickedTaskId = this.state.clickedTaskId;
+                    const shouldPulseOnListSwitch = this.state.listSwitchedPulse;
                     const frag = document.createDocumentFragment();
                     const now = Date.now();
                     const activeKeyword = this.state.sidebarSearchKeyword;
@@ -1230,7 +1326,7 @@
                         const isToggledByCard = this.state.expandedTaskIds.includes(task.id);
                         const baseShowDetail = this.state.sidebarSearchKeyword ? true : this.state.showDetails;
                         const shouldShowDetail = baseShowDetail ? !isToggledByCard : isToggledByCard;
-                        li.className = `task-item ${task.completed ? 'completed' : ''} ${shouldShowDetail ? 'show-detail' : ''} ${hasMeta ? '' : 'no-meta'} ${newlyAddedIdSet.has(task.id) ? 'task-item-new' : ''}`;
+                        li.className = `task-item ${task.completed ? 'completed' : ''} ${shouldShowDetail ? 'show-detail' : ''} ${hasMeta ? '' : 'no-meta'} ${newlyAddedIdSet.has(task.id) ? 'task-item-new' : ''} ${clickedTaskId === task.id ? 'task-item-clicked' : ''} ${shouldPulseOnListSwitch ? 'task-item-list-switch' : ''}`;
                         li.dataset.id = task.id;
 
                         const completedInfoText = task.completedAt ? `完成于${this.formatDateWithWeekday(task.completedAt)}` : '';
@@ -1272,6 +1368,8 @@
                     });
                     listEl.appendChild(frag);
                     if (newlyAddedIdSet.size > 0) this.state.newlyAddedTaskIds = [];
+                    if (clickedTaskId !== null) this.state.clickedTaskId = null;
+                    if (shouldPulseOnListSwitch) this.state.listSwitchedPulse = false;
                 },
 
                 getRelativeTime(timestamp, hasTime, referenceTime = Date.now()) {
