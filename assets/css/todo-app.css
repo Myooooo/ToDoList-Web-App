@@ -737,6 +737,26 @@
             text-decoration: line-through;
             color: #a19f9d;
         }
+        .add-step-list .step-text,
+        .edit-step-list .step-text {
+            cursor: text;
+        }
+        .step-edit-input {
+            width: 100%;
+            border: none;
+            border-bottom: none;
+            border-radius: 0;
+            background: transparent;
+            color: var(--text-main);
+            font-size: 13px;
+            font-family: inherit;
+            line-height: 1.3;
+            padding: 0;
+            min-width: 0;
+        }
+        .step-edit-input:focus {
+            border-bottom: none;
+        }
         .step-delete {
             border: none;
             background: none;

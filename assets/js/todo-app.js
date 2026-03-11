@@ -19,7 +19,9 @@
                     editingTaskId: null,
                     editingListId: null,
                     editingSteps: [],
+                    editingStepEditId: null,
                     addingSteps: [],
+                    addingStepEditId: null,
                     newlyAddedTaskIds: [],
                     clickedTaskId: null,
                     listSwitchedPulse: false,
@@ -306,10 +308,29 @@
                     });
                     this.dom.inpStepList.addEventListener('click', (e) => {
                         const delBtn = e.target.closest('.edit-step-delete');
-                        if (!delBtn) return;
-                        const stepId = parseInt(delBtn.dataset.stepId);
-                        this.deleteAddingStep(stepId);
-                        this.dom.inpStepInput.focus();
+                        if (delBtn) {
+                            const stepId = parseInt(delBtn.dataset.stepId);
+                            this.deleteAddingStep(stepId);
+                            this.dom.inpStepInput.focus();
+                            return;
+                        }
+                    });
+                    this.dom.inpStepList.addEventListener('input', (e) => {
+                        const input = e.target.closest('.step-edit-input[data-context="add"]');
+                        if (!input) return;
+                        const stepId = parseInt(input.dataset.stepId);
+                        this.updateAddingStepText(stepId, input.value);
+                    });
+                    this.dom.inpStepList.addEventListener('keydown', (e) => {
+                        const input = e.target.closest('.step-edit-input[data-context="add"]');
+                        if (!input) return;
+                        if (e.key === 'Enter' && !e.isComposing) {
+                            e.preventDefault();
+                            this.dom.inpStepInput.focus();
+                        } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            input.blur();
+                        }
                     });
                     this.dom.inpStepAddRow.addEventListener('click', () => {
                         this.dom.inpStepInput.focus();
@@ -421,6 +442,24 @@
                             const stepId = parseInt(delBtn.dataset.stepId);
                             this.deleteEditingStep(stepId);
                             this.dom.editStepInput.focus();
+                            return;
+                        }
+                    });
+                    this.dom.editStepList.addEventListener('input', (e) => {
+                        const input = e.target.closest('.step-edit-input[data-context="edit"]');
+                        if (!input) return;
+                        const stepId = parseInt(input.dataset.stepId);
+                        this.updateEditingStepText(stepId, input.value);
+                    });
+                    this.dom.editStepList.addEventListener('keydown', (e) => {
+                        const input = e.target.closest('.step-edit-input[data-context="edit"]');
+                        if (!input) return;
+                        if (e.key === 'Enter' && !e.isComposing) {
+                            e.preventDefault();
+                            this.dom.editStepInput.focus();
+                        } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            input.blur();
                         }
                     });
                     this.dom.editStepAddRow.addEventListener('click', () => {
@@ -471,7 +510,7 @@
                         <li class="step-item">
                             <div class="edit-step-main">
                                 <button class="step-checkbox" disabled title="步骤"></button>
-                                <span class="step-text">${this.escapeHtml(step.text)}</span>
+                                <input class="step-edit-input" data-context="add" data-step-id="${step.id}" value="${this.escapeHtml(step.text)}" />
                             </div>
                             <button class="edit-step-delete" data-step-id="${step.id}" title="删除步骤">
                                 <svg viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
@@ -492,6 +531,37 @@
 
                 deleteAddingStep(stepId) {
                     this.state.addingSteps = this.state.addingSteps.filter(s => s.id !== stepId);
+                    if (this.state.addingStepEditId === stepId) this.state.addingStepEditId = null;
+                    this.renderAddingSteps();
+                },
+
+                updateAddingStepText(stepId, stepText) {
+                    const step = this.state.addingSteps.find(s => s.id === stepId);
+                    if (!step) return;
+                    step.text = stepText;
+                },
+
+                startAddingStepEdit(stepId) {
+                    if (Number.isNaN(stepId)) return;
+                    this.state.addingStepEditId = stepId;
+                    this.renderAddingSteps();
+                },
+
+                finishAddingStepEdit(stepId, stepText) {
+                    if (this.state.addingStepEditId !== stepId) return;
+                    const step = this.state.addingSteps.find(s => s.id === stepId);
+                    if (!step) {
+                        this.state.addingStepEditId = null;
+                        return;
+                    }
+                    const text = (stepText || '').trim();
+                    if (text) step.text = text;
+                    this.state.addingStepEditId = null;
+                    this.renderAddingSteps();
+                },
+
+                cancelAddingStepEdit() {
+                    this.state.addingStepEditId = null;
                     this.renderAddingSteps();
                 },
 
@@ -813,6 +883,7 @@
                     this.state.editingTaskId = null;
                     this.state.editingListId = null;
                     this.state.editingSteps = [];
+                    this.state.editingStepEditId = null;
                 },
 
                 updateEditStepInputPlaceholder() {
@@ -826,7 +897,7 @@
                         <li class="step-item ${step.completed ? 'done' : ''}">
                             <div class="edit-step-main">
                                 <button class="step-checkbox" data-step-id="${step.id}" title="完成步骤"></button>
-                                <span class="step-text">${this.escapeHtml(step.text)}</span>
+                                <input class="step-edit-input" data-context="edit" data-step-id="${step.id}" value="${this.escapeHtml(step.text)}" />
                             </div>
                             <button class="edit-step-delete" data-step-id="${step.id}" title="删除步骤">
                                 <svg viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
@@ -840,6 +911,7 @@
                     const text = (stepText || '').trim();
                     if (!text) return;
                     this.state.editingSteps.push({ id: Date.now(), text: text, completed: false });
+                    this.state.editingStepEditId = null;
                     this.renderEditingSteps();
                     this.dom.editStepInput.focus();
                     this.dom.editStepList.scrollTop = this.dom.editStepList.scrollHeight;
@@ -854,6 +926,37 @@
 
                 deleteEditingStep(stepId) {
                     this.state.editingSteps = this.state.editingSteps.filter(s => s.id !== stepId);
+                    if (this.state.editingStepEditId === stepId) this.state.editingStepEditId = null;
+                    this.renderEditingSteps();
+                },
+
+                updateEditingStepText(stepId, stepText) {
+                    const step = this.state.editingSteps.find(s => s.id === stepId);
+                    if (!step) return;
+                    step.text = stepText;
+                },
+
+                startEditingStepEdit(stepId) {
+                    if (Number.isNaN(stepId)) return;
+                    this.state.editingStepEditId = stepId;
+                    this.renderEditingSteps();
+                },
+
+                finishEditingStepEdit(stepId, stepText) {
+                    if (this.state.editingStepEditId !== stepId) return;
+                    const step = this.state.editingSteps.find(s => s.id === stepId);
+                    if (!step) {
+                        this.state.editingStepEditId = null;
+                        return;
+                    }
+                    const text = (stepText || '').trim();
+                    if (text) step.text = text;
+                    this.state.editingStepEditId = null;
+                    this.renderEditingSteps();
+                },
+
+                cancelEditingStepEdit() {
+                    this.state.editingStepEditId = null;
                     this.renderEditingSteps();
                 },
 
@@ -895,6 +998,7 @@
                     });
                     this.dom.editInpList.value = task.listId;
                     this.state.editingSteps = Array.isArray(task.steps) ? task.steps.map(s => ({ ...s })) : [];
+                    this.state.editingStepEditId = null;
                     this.renderEditingSteps();
                     this.openModal('task');
                     this.dom.editInpText.focus();
